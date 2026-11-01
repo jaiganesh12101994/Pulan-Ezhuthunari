@@ -1,0 +1,97 @@
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
+node_modules/
+
+# ---------------------------------------------------------------------------
+# Build output and generated files
+#
+# build/ is the desktop staging folder (embedded Python, Tesseract, installer).
+# Note that gitignore has no trailing comments: a pattern must be on its own line.
+# ---------------------------------------------------------------------------
+dist/
+build/
+out/
+release/
+*.tsbuildinfo
+
+# ---------------------------------------------------------------------------
+# Runtime data the app writes (diagnostics records and image artifacts).
+# These contain the names and content of whatever documents were processed.
+# ---------------------------------------------------------------------------
+diagnostics/
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---------------------------------------------------------------------------
+# Logs and caches
+# ---------------------------------------------------------------------------
+*.log
+logs/
+.cache/
+.vite/
+.eslintcache
+
+# ---------------------------------------------------------------------------
+# Environment files. These hold API keys; only the template is committed.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# ---------------------------------------------------------------------------
+# Certificates, signing keys and credential stores
+# ---------------------------------------------------------------------------
+*.pem
+*.key
+*.pfx
+*.p12
+*.jks
+*.keystore
+*.ppk
+*.crt
+*.cer
+*.der
+*.p8
+*.mobileprovision
+
+# ---------------------------------------------------------------------------
+# Local databases and data files that may hold confidential content
+# ---------------------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+*.mdb
+*.accdb
+*.kdbx
+*.parquet
+
+# ---------------------------------------------------------------------------
+# Temporary and backup files
+# ---------------------------------------------------------------------------
+*.tmp
+*.temp
+*.bak
+*.orig
+*.swp
+*~
+
+# ---------------------------------------------------------------------------
+# Editor and OS noise
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+

@@ -1,0 +1,23 @@
+{
+  "name": "Surya & Chandra Tamil OCR Pipeline",
+  "version": "1.4.0",
+  "languages": ["ta", "en"],
+  "layout_detection": {
+    "model_type": "surya_layout_predictor",
+    "column_segmentation": true,
+    "reading_order_sort": "top_to_bottom_left_to_right",
+    "gutter_threshold_ratio": 0.04
+  },
+  "indic_chandra_pipeline": {
+    "script": "tamil",
+    "unicode_range": ["0B80", "0BFF"],
+    "ligature_normalization": true,
+    "multi_column_support": true,
+    "denoise_filter": "bilateral",
+    "pulli_sharpening_kernel": [
+      [-1, -1, -1],
+      [-1,  9, -1],
+      [-1, -1, -1]
+    ]
+  }
+}

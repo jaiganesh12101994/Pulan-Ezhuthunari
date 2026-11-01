@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+/* The app ships a single light theme: keep native controls, scrollbars and
+   form widgets light as well, and give the page a matching base colour so there
+   is no dark flash before React mounts. */
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+/* The packaged desktop build has no native title bar, so the app's own top panel doubles
+   as one: the space beside the menus and the window controls drags the window.
+   Interactive children opt out, or a click on File would move the window instead of
+   opening the menu. Both properties are ignored by a browser, so the same markup works
+   in the dev server. */
+.app-drag-region {
+  -webkit-app-region: drag;
+}
+
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Pulan Tamil OCR",
+  "description": "Multi-engine Tamil OCR and Document Layout Analysis Studio with Tesseract, Surya, Chandra, and Gnana70 OCR Tamil, multi-column auto-detection, batch processing, and docx/txt/json/html export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

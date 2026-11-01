@@ -1,0 +1,56 @@
+# Packaging the Windows desktop app.
+#
+# The split matters. electron/ holds only the shell - the window, the window controls
+# and the process that starts the OCR server - and that alone goes inside the app
+# archive. Everything the server executes at runtime (Python, Tesseract, Poppler) is
+# copied in as extraResources instead, because Windows cannot run a binary out of an
+# asar archive.
+#
+#   resources/app.asar     electron/ + package.json
+#   resources/app/         the staged server: server.mjs, dist/, backend/, engines/,
+#                          python/, bin/, public/   (see scripts/build-desktop.ps1)
+#
+# Build it with:
+#   npm run desktop:installer
+
+appId: org.pulan.tamilocr
+productName: Pulan Tamil OCR
+copyright: Pulan Tamil OCR
+
+directories:
+  output: build/installer
+  buildResources: electron/build-resources
+
+# Without the node_modules exclusion electron-builder would pack this project's
+# production dependencies (~200 MB) into the archive for no reason: the server is
+# already bundled into a single server.mjs and needs none of them.
+files:
+  - electron/**
+  - package.json
+  - '!node_modules/**'
+
+extraResources:
+  - from: build/app
+    to: app
+
+asar: true
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: PulanTamilOCR-${version}-Setup.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Pulan Tamil OCR
+  # Uninstalling must not throw away the user's diagnostics records or their
+  # subscription sign-ins, which live in %APPDATA%\Pulan Tamil OCR.
+  deleteAppDataOnUninstall: false
+  # Nothing here is a file association or a driver, so the installer stays simple.
+  include: ''
