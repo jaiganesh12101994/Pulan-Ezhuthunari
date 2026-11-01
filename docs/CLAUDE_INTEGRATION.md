@@ -10,7 +10,7 @@ what the code deliberately does *not* do.
 |---|---|---|
 | Transport | Anthropic Messages API over HTTPS, in process | Claude Agent SDK (`claude-agent-sdk`) → Claude Code CLI → your account |
 | Code | `aiVision.ts` (`callAnthropic`) | `agentClient.ts` → `backend/agent/` → `aiVision.ts` (`callClaudeAgent`) |
-| Needs | `ANTHROPIC_API_KEY`, or a key pasted in the panel | the `claude-agent-sdk` package (**Install it for me** in the panel runs `pip install claude-agent-sdk`), then **Sign in** |
+| Needs | `ANTHROPIC_API_KEY`, or a key pasted in the panel | the `claude-agent-sdk` package, which the desktop app already bundles, then **Sign in** in the panel |
 | Chosen by | leaving **Subscription** unticked | ticking **Subscription** in the engine options panel |
 
 The panel is unchanged in both modes: layout detection and OCR return the same
@@ -57,10 +57,12 @@ The panel shows the account it finds, including the plan and address the CLI rep
 
 ### If the provider's tool is missing
 
-Claude Code ships inside the `claude-agent-sdk` wheel, so it is normally already there.
-OpenAI's Codex CLI ships with nothing, and it is the only supported way to sign in to a
-ChatGPT subscription — so it has to be installed. When the tool is missing, the panel
-says so, shows the exact command, and offers **Install it for me**:
+Claude Code ships inside the `claude-agent-sdk` wheel, and the desktop app bundles that
+package, so on a normal install there is nothing to fetch: the toolbar shows the account
+instead of a warning. OpenAI's Codex CLI ships with nothing, and it is the only supported
+way to sign in to a ChatGPT subscription — so it has to be installed. When a tool *is*
+missing (running from source, or a `-WithoutClaudeSdk` build), the panel says so, shows
+the exact command, and offers **Install it for me**:
 
 | Provider | Command | When the panel offers it |
 |---|---|---|
@@ -72,8 +74,7 @@ Claude needs two things, and which one is missing decides the command:
 
 * **The `claude-agent-sdk` package is the transport.** Nothing works without it, and its
   wheel carries a Claude Code binary, so installing it fixes both halves at once. This is
-  the case in a packaged build, where the SDK is deliberately left out — which is why pip
-  is bundled with the app.
+  why the desktop app bundles the whole package rather than asking for it later.
 * **A usable Claude Code CLI.** With the SDK already present, only the CLI can be
   missing, and Anthropic's own installer is then the right command. It writes a real
   `claude.exe` to `%USERPROFILE%\.local\bin`, where this app already looks, so it needs
@@ -431,7 +432,7 @@ assertion is that the work directory stays empty) and Stop.
 
 | Symptom | Cause and fix |
 |---|---|
-| Badge says *Agent SDK not installed* | press **Install it for me** in the sign-in panel, which runs `pip install claude-agent-sdk` in the Python this app uses — a packaged build ships pip for exactly this |
+| Badge says *Agent SDK not installed* | the `claude-agent-sdk` package is missing; press **Install it for me** in the sign-in panel, or `pip install claude-agent-sdk` in the Python this app uses. A packaged build bundles both the SDK and pip |
 | *OpenAI's Codex CLI was not found* | press **Install it for me** in the sign-in panel, or run `npm install -g @openai/codex` |
 | Badge says *Claude Code not found* | the SDK is present but no usable executable; press **Install it for me** (Anthropic's installer), or set the CLI path to a native `claude.exe` |
 | *Claude Code is not signed in* | press **Sign in** and finish in the browser; no terminal is needed |

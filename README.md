@@ -89,7 +89,7 @@ language models and Poppler with it.
 | Tesseract 5 | The OCR engine itself. On Windows, an install under `C:\Program Files\Tesseract-OCR` is found automatically |
 | Poppler | `pdftoppm` and `pdfinfo`, needed to open PDFs; not needed for image files |
 | Python packages | `pip install pillow numpy opencv-python pytesseract python-docx` |
-| Optional | `pip install claude-agent-sdk` to use a Claude subscription instead of an API key. The packaged Windows app ships pip and offers to run this for you from the sign-in panel |
+| Optional | `pip install claude-agent-sdk` to use a Claude subscription instead of an API key. The packaged Windows app already includes it, so there is nothing to install there |
 
 The Tamil and English language models ship in `engines/tessdata`, so no separate
 `traineddata` download is required.
@@ -148,7 +148,7 @@ a machine you control rather than exposed to a network.
 | Tesseract (multi-language) | bundled Tesseract + `engines/tessdata` | nothing extra |
 | Surya / Chandra / gnana70 | Tesseract pipelines with their own preprocessing | nothing extra |
 | **Google Gemini** | Gemini vision API, or a Google AI plan (Free/Pro/Ultra) through the Antigravity CLI | `GEMINI_API_KEY`, or tick **Subscription** |
-| **Claude (Anthropic) Vision** | Anthropic Messages API, or your Claude subscription through Claude Code | `ANTHROPIC_API_KEY`, or tick **Subscription** and press **Install it for me** in the sign-in panel, which installs `claude-agent-sdk`, then sign in |
+| **Claude (Anthropic) Vision** | Anthropic Messages API, or your Claude subscription through Claude Code | `ANTHROPIC_API_KEY`, or tick **Subscription** and sign in — the desktop app bundles everything the subscription needs |
 | **ChatGPT (OpenAI) Vision** | OpenAI chat-completions API | `OPENAI_API_KEY`, or tick **Subscription** to run through the local `codex` CLI |
 | **OpenAI-compatible AI** | any endpoint speaking the OpenAI chat-completions API with image parts | a base URL and model name (Ollama, LM Studio, vLLM, OpenRouter, Groq, DeepSeek, a gateway, ...) |
 
