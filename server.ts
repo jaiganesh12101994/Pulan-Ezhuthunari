@@ -212,6 +212,18 @@ function imageSizeOr(filePath: string): { width: number; height: number } {
 const PDFTOPPM_BIN = process.env.PDFTOPPM_BIN || 'pdftoppm';
 const PDFINFO_BIN = process.env.PDFINFO_BIN || 'pdfinfo';
 const PDF_DPI = String(process.env.PDF_DPI || '200');
+// The UI picks a render resolution per upload; PDF_DPI stays the default for direct API
+// callers. Sharper pages read Tamil markedly better, at the cost of render time and temp
+// space, so this is a setting rather than a constant.
+const MIN_PDF_DPI = 72;
+const MAX_PDF_DPI = 600;
+
+function clampDpi(value: unknown): number {
+  const fallback = Number(PDF_DPI) || 200;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.max(MIN_PDF_DPI, Math.min(MAX_PDF_DPI, Math.round(parsed)));
+}
 const PDF_WORKERS = Math.max(
   1,
   Math.min(8, Number(process.env.PDF_WORKERS) || Math.min(4, os.cpus().length || 1))
@@ -243,8 +255,14 @@ async function getPdfPageCount(pdfPath: string): Promise<number | null> {
 }
 
 // A 200 DPI page of a scanned Tamil book lands around 1-3 MB of PNG, so this is the
-// figure used to decide whether the document will fit before rendering starts.
+// figure used to decide whether the document will fit before rendering starts. It scales
+// with the square of the resolution, because a page has two dimensions.
 const ESTIMATED_PAGE_BYTES = 2_500_000;
+
+function estimatedPageBytes(dpi: number): number {
+  const scale = Math.max(0.25, dpi / 200);
+  return Math.round(ESTIMATED_PAGE_BYTES * scale * scale);
+}
 
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
@@ -259,7 +277,7 @@ function formatBytes(bytes: number): string {
  * this the run dies part way through on an ENOSPC from pdftoppm, which reaches the user
  * as an unhelpful "Failed to process PDF" after ten minutes of waiting.
  */
-function assertRoomForPages(pageCount: number | null, label: string): void {
+function assertRoomForPages(pageCount: number | null, label: string, dpi = Number(PDF_DPI) || 200): void {
   if (!pageCount || pageCount <= 0) return;
   let free: number;
   try {
@@ -268,12 +286,13 @@ function assertRoomForPages(pageCount: number | null, label: string): void {
   } catch {
     return; // no free-space information: let the render try
   }
-  const needed = pageCount * ESTIMATED_PAGE_BYTES;
+  const needed = pageCount * estimatedPageBytes(dpi);
   if (free < needed) {
     throw new Error(
-      `Rendering ${pageCount} pages of ${label} needs roughly ${formatBytes(needed)} of ` +
-        `free space in ${TEMP_DIR}, but only ${formatBytes(free)} is available. Free some ` +
-        `space, or render at a lower resolution by setting PDF_DPI (currently ${PDF_DPI}).`
+      `Rendering ${pageCount} pages of ${label} at ${dpi} DPI needs roughly ` +
+        `${formatBytes(needed)} of free space in ${TEMP_DIR}, but only ${formatBytes(free)} ` +
+        `is available. Free some space, or lower the render resolution (Render DPI in the ` +
+        `toolbar, or PDF_DPI for API callers).`
     );
   }
 }
@@ -297,10 +316,11 @@ function sortPagesByNumber(files: string[]): string[] {
 async function renderPdfToPng(
   pdfPath: string,
   outputPrefix: string,
-  pageCount: number | null
+  pageCount: number | null,
+  dpi = Number(PDF_DPI) || 200
 ): Promise<string[]> {
   const prefixBase = path.basename(outputPrefix);
-  const baseArgs = ['-png', '-r', PDF_DPI];
+  const baseArgs = ['-png', '-r', String(dpi)];
 
   if (!pageCount || pageCount <= 1) {
     await runProcess(PDFTOPPM_BIN, [...baseArgs, pdfPath, outputPrefix]);
@@ -900,8 +920,9 @@ interface UploadProgress {
 
 async function processUploadedFiles(
   files: Express.Multer.File[],
-  onProgress?: (info: UploadProgress) => void
-): Promise<{ documentName: string; pages: UploadedPage[] }> {
+  onProgress?: (info: UploadProgress) => void,
+  dpi = Number(PDF_DPI) || 200
+): Promise<{ documentName: string; pages: UploadedPage[]; renderDpi: number }> {
   const pagesResult: UploadedPage[] = [];
   let overallPageIndex = 1;
 
@@ -915,12 +936,12 @@ async function processUploadedFiles(
 
       // Check for room before the long render, rather than discovering it half way
       // through when pdftoppm fails with ENOSPC.
-      assertRoomForPages(pageCount, file.originalname);
+      assertRoomForPages(pageCount, file.originalname, dpi);
 
       onProgress?.({
         message: pageCount
-          ? `Rendering PDF pages (0 of ${pageCount})...`
-          : 'Rendering PDF pages...',
+          ? `Rendering PDF pages at ${dpi} DPI (0 of ${pageCount})...`
+          : `Rendering PDF pages at ${dpi} DPI...`,
         page: 0,
         total: pageCount || 0,
       });
@@ -942,7 +963,7 @@ async function processUploadedFiles(
       let generatedPages: string[];
       try {
         generatedPages = sortPagesByNumber(
-          await renderPdfToPng(file.path, outputPrefix, pageCount)
+          await renderPdfToPng(file.path, outputPrefix, pageCount, dpi)
         );
       } catch (pdfErr: any) {
         console.error('PDF conversion failed:', pdfErr);
@@ -989,6 +1010,7 @@ async function processUploadedFiles(
   return {
     documentName: files.length === 1 ? files[0].originalname : `${files.length} Files Loaded`,
     pages: pagesResult,
+    renderDpi: dpi,
   };
 }
 
@@ -999,7 +1021,7 @@ app.post('/api/upload', upload.array('files', 50), async (req, res) => {
     if (!files || files.length === 0) {
       return res.status(400).json({ error: 'No files uploaded' });
     }
-    const result = await processUploadedFiles(files);
+    const result = await processUploadedFiles(files, undefined, clampDpi(req.body?.dpi));
     res.json({ success: true, ...result });
   } catch (err: any) {
     console.error('Upload error:', err);
@@ -1024,9 +1046,12 @@ app.post('/api/upload-stream', upload.array('files', 50), async (req, res) => {
       return res.end();
     }
 
-    write({ type: 'start', fileCount: files.length });
-    const result = await processUploadedFiles(files, (info) =>
-      write({ type: 'progress', ...info })
+    const dpi = clampDpi(req.body?.dpi);
+    write({ type: 'start', fileCount: files.length, renderDpi: dpi });
+    const result = await processUploadedFiles(
+      files,
+      (info) => write({ type: 'progress', ...info }),
+      dpi
     );
     write({ type: 'done', success: true, ...result });
   } catch (err: any) {

@@ -17,6 +17,16 @@ export function isAiEngineId(engine: string): engine is AiEngineId {
   return (AI_ENGINE_IDS as readonly string[]).includes(engine);
 }
 
+/**
+ * Render resolutions offered for rasterizing PDF pages.
+ *
+ * Sharper pages read Tamil markedly better — a two-column scan holds far more detail per
+ * glyph at 300 DPI than at 200 — so 300 is the default. It stays a setting because the
+ * cost grows with the square of the resolution, in both render time and temp space.
+ */
+export const RENDER_DPI_OPTIONS = [200, 300, 400, 600] as const;
+export const DEFAULT_RENDER_DPI = 300;
+
 /** Settings for one AI provider, entered in the engine options panel. */
 export interface AiProviderSettings {
   /**

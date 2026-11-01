@@ -38,7 +38,7 @@ import {
   TerminalSquare,
   ShieldCheck,
 } from 'lucide-react';
-import { OCREngine, ImageFilters, EngineOptionsState, EngineStatus, TessLanguageInfo, AiProviderInfo, AiProviderSettings, isAiEngineId } from '../types';
+import { OCREngine, ImageFilters, EngineOptionsState, EngineStatus, TessLanguageInfo, AiProviderInfo, AiProviderSettings, isAiEngineId, RENDER_DPI_OPTIONS } from '../types';
 
 interface PulanToolBarProps {
   onOpenFile: () => void;
@@ -61,6 +61,9 @@ interface PulanToolBarProps {
   onToggleInvert: () => void;
   layoutMode: string;
   onSetLayoutMode: (mode: string) => void;
+  /** PDF render resolution; sharper pages read Tamil better but render slower. */
+  renderDpi: number;
+  onSetRenderDpi: (dpi: number) => void;
   onDetectLayoutAllPages: () => void;
   onDetectLayoutCurrentPage: () => void;
   isDetectingLayout: boolean;
@@ -105,6 +108,8 @@ export const PulanToolBar: React.FC<PulanToolBarProps> = ({
   onToggleInvert,
   layoutMode,
   onSetLayoutMode,
+  renderDpi,
+  onSetRenderDpi,
   onDetectLayoutAllPages,
   onDetectLayoutCurrentPage,
   isDetectingLayout,
@@ -407,6 +412,23 @@ export const PulanToolBar: React.FC<PulanToolBarProps> = ({
           <option value="2col">2-Columns Layout</option>
           <option value="3col">3-Columns Layout</option>
           <option value="single">Single Block</option>
+        </select>
+
+        {/* Render resolution: the single biggest lever on Tamil accuracy for scanned pages */}
+        <select
+          value={renderDpi}
+          onChange={(e) => onSetRenderDpi(Number(e.target.value))}
+          title={
+            'Render DPI for PDF pages. Higher is sharper and reads Tamil better, but renders ' +
+            'slower and uses more temporary space. Applies to the next document you open.'
+          }
+          className="bg-[#ffffff] text-slate-800 border border-[#cbd5e1] rounded px-2 py-1 text-[11px] font-medium outline-hidden"
+        >
+          {RENDER_DPI_OPTIONS.map((dpi) => (
+            <option key={dpi} value={dpi}>
+              {dpi} DPI
+            </option>
+          ))}
         </select>
 
         {/* PRIMARY ACTION: Detect Layout (All Pages) in single button */}

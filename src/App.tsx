@@ -21,8 +21,17 @@ import {
   TessLanguageInfo,
   AiProviderInfo,
   isAiEngineId,
+  RENDER_DPI_OPTIONS,
+  DEFAULT_RENDER_DPI,
 } from './types';
 
+/**
+ * Render resolution for rasterized PDF pages. Sharper pages read Tamil markedly better — a
+ * two-column scan holds far more detail per glyph at 300 DPI than at 200 — so 300 is the
+ * default. It stays a setting because the cost grows with the square of the resolution, in
+ * both render time and temp space, which matters on a volume-sized book.
+ * The options themselves live in ./types so the toolbar can offer them too.
+ */
 export default function App() {
   // Document state
   const [documentName, setDocumentName] = useState<string>('tamil_multicolumn_document.pdf');
@@ -110,6 +119,24 @@ export default function App() {
   const [showDiagnostics, setShowDiagnostics] = useState<boolean>(false);
   const [diagnosticsId, setDiagnosticsId] = useState<string | null>(null);
   const [renderDpi, setRenderDpi] = useState<number | undefined>(undefined);
+  // The resolution the user chose; `renderDpi` above is what the last render actually used.
+  const [renderDpiSetting, setRenderDpiSetting] = useState<number>(() => {
+    try {
+      const stored = Number(localStorage.getItem('pulan.renderDpi'));
+      if ((RENDER_DPI_OPTIONS as readonly number[]).includes(stored)) return stored;
+    } catch {
+      // private browsing / storage disabled: fall back to the default
+    }
+    return DEFAULT_RENDER_DPI;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('pulan.renderDpi', String(renderDpiSetting));
+    } catch {
+      // settings simply do not persist
+    }
+  }, [renderDpiSetting]);
 
   // AI vision providers (Claude / ChatGPT / OpenAI-compatible) availability
   const [aiProvidersInfo, setAiProvidersInfo] = useState<AiProviderInfo[]>([]);
@@ -375,6 +402,8 @@ export default function App() {
     for (let i = 0; i < files.length; i++) {
       formData.append('files', files[i]);
     }
+    // The resolution this document is rasterized at (see RENDER_DPI_OPTIONS).
+    formData.append('dpi', String(renderDpiSetting));
 
     // Stay open on failure: a long message in the status bar is easy to miss, and the
     // dialog is where the user is looking.
@@ -469,6 +498,8 @@ export default function App() {
       if (newPages.length === 0) throw new Error('Upload produced no document pages');
 
       setDocumentName(doneEvent.documentName);
+      // Diagnostics should record the resolution the pages were actually rendered at.
+      if (typeof doneEvent.renderDpi === 'number') setRenderDpi(doneEvent.renderDpi);
       setPages(newPages);
       setCurrentPageIndex(0);
       setSelectedPageIds(new Set(newPages.map((p) => p.id)));
@@ -613,6 +644,30 @@ export default function App() {
     }
   };
 
+  /**
+   * The reading zones of one page, from the server's layout detector.
+   *
+   * This is the call the "Detect Layout" button makes. OCR also uses it on its own for a
+   * page that has no zones yet, because a two-column page recognised as one block is read
+   * straight across both columns — which is what produces interleaved, wrong text.
+   */
+  const detectZonesForPage = async (page: DocumentPage): Promise<LayoutZone[]> => {
+    const res = await fetch('/api/layout-detect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image: page.url,
+        filePath: page.filePath,
+        mode: layoutMode,
+        engine: selectedEngine,
+        ai: isAiEngineId(selectedEngine) ? aiSettingsFor(selectedEngine) : undefined,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Layout detection failed');
+    return (data.zones || []) as LayoutZone[];
+  };
+
   // Detect Layout (Current Page)
   const handleDetectLayoutCurrentPage = async () => {
     if (!currentPage) return;
@@ -665,8 +720,21 @@ export default function App() {
     setStatusMessage(`Running ${selectedEngine.toUpperCase()} Tamil OCR on Page ${currentPage.pageNumber}...`);
 
     try {
-      // If zones exist, recognize in reading order and join
-      const zones = currentPage.detectedZones;
+      // If zones exist, recognize in reading order and join. A page that has none is
+      // analysed first, so a two-column page is never read as a single block. Detection
+      // failing must not stop OCR: the full-page path below still reads the page, and the
+      // engine splits obvious columns by itself.
+      let zones = currentPage.detectedZones;
+      let detectedHere: LayoutZone[] = [];
+      if (zones.length === 0) {
+        try {
+          setStatusMessage(`Page ${currentPage.pageNumber}: detecting columns...`);
+          detectedHere = await detectZonesForPage(currentPage);
+          zones = detectedHere;
+        } catch (err: any) {
+          console.warn('Automatic layout detection failed; reading the page as a whole:', err);
+        }
+      }
       let finalPageText = '';
       const zoneTexts: Record<string, string> = {};
 
@@ -718,19 +786,20 @@ export default function App() {
         finalPageText = data.text || '';
       }
 
-      // Update page, keeping each zone's own text so corrections assemble correctly
-      const updated = pages.map((p, idx) =>
-        idx === currentPageIndex
-          ? {
-              ...p,
-              detectedZones: p.detectedZones.map((zone) =>
-                zoneTexts[zone.id] !== undefined ? { ...zone, text: zoneTexts[zone.id] } : zone
-              ),
-              ocrText: finalPageText,
-              ocrStatus: 'done' as const,
-            }
-          : p
-      );
+      // Update page, keeping each zone's own text so corrections assemble correctly. Zones
+      // detected by this run are stored as well, so the overlay shows what was read.
+      const updated = pages.map((p, idx) => {
+        if (idx !== currentPageIndex) return p;
+        const pageZones = detectedHere.length > 0 ? detectedHere : p.detectedZones;
+        return {
+          ...p,
+          detectedZones: pageZones.map((zone) =>
+            zoneTexts[zone.id] !== undefined ? { ...zone, text: zoneTexts[zone.id] } : zone
+          ),
+          ocrText: finalPageText,
+          ocrStatus: 'done' as const,
+        };
+      });
       setPages(updated);
 
       // Rebuild combined text
@@ -825,8 +894,22 @@ export default function App() {
 
         let pageResult = '';
         const zoneTexts: Record<string, string> = {};
-        if (p.detectedZones && p.detectedZones.length > 0) {
-          const sorted = [...p.detectedZones].sort((a, b) => a.order - b.order);
+        // Same automatic detection as the single-page path: a page that has no zones yet is
+        // analysed before it is read, so its columns are never recognised as one block.
+        let pageZones = p.detectedZones || [];
+        if (pageZones.length === 0) {
+          try {
+            setBatchModal((prev) => ({
+              ...prev,
+              currentMessage: `Page ${i + 1} of ${updatedPages.length}: detecting columns...`,
+            }));
+            pageZones = await detectZonesForPage(p);
+          } catch (err: any) {
+            console.warn('Automatic layout detection failed; reading the page as a whole:', err);
+          }
+        }
+        if (pageZones.length > 0) {
+          const sorted = [...pageZones].sort((a, b) => a.order - b.order);
           const zTexts = [];
           for (const z of sorted) {
             if (batchCancelRef.current) break;
@@ -885,7 +968,7 @@ export default function App() {
 
         updatedPages[i] = {
           ...p,
-          detectedZones: p.detectedZones.map((zone) =>
+          detectedZones: pageZones.map((zone) =>
             zoneTexts[zone.id] !== undefined ? { ...zone, text: zoneTexts[zone.id] } : zone
           ),
           ocrText: pageResult,
@@ -1192,6 +1275,8 @@ export default function App() {
         onToggleInvert={() => setFilters((f) => ({ ...f, invert: !f.invert }))}
         layoutMode={layoutMode}
         onSetLayoutMode={setLayoutMode}
+        renderDpi={renderDpiSetting}
+        onSetRenderDpi={setRenderDpiSetting}
         onDetectLayoutAllPages={handleDetectLayoutAllPages}
         onDetectLayoutCurrentPage={handleDetectLayoutCurrentPage}
         isDetectingLayout={isDetectingLayout}

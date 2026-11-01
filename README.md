@@ -197,7 +197,7 @@ instead of failing part way through with a disk-full error. Two settings control
 | Setting | Default | Purpose |
 |---|---|---|
 | `PULAN_MAX_UPLOAD_MB` | `4096` | Largest single upload accepted |
-| `PDF_DPI` | `200` | Quality against speed and disk space; lower it to fit a very large volume on a small drive |
+| `PDF_DPI` | `200` | Default rasterization resolution for API callers. The toolbar's **Render DPI** selector (default 300) overrides it per document; lower either to fit a very large volume on a small drive |
 | `PDF_WORKERS` | CPU cores, max 8 | Parallel `pdftoppm` processes |
 
 All three are documented in [.env.example](.env.example).
