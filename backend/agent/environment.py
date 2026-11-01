@@ -39,6 +39,30 @@ WINDOWS_BATCH_SUFFIXES = (".cmd", ".bat")
 CLI_PATH_ENV = "PULAN_CLAUDE_CLI"
 WORKDIR_ENV = "PULAN_AGENT_WORKDIR"
 
+#: Anthropic's own installer for Claude Code, the vendor-documented way to get a CLI
+#: that is not the npm `.cmd` shim. It writes a real `claude.exe` to `~/.local/bin`,
+#: which `_common_locations` already probes, so the app finds it without PATH being
+#: updated. Documented at https://code.claude.com/docs/en/setup
+CLAUDE_CODE_INSTALL_PS1 = "irm https://claude.ai/install.ps1 | iex"
+CLAUDE_CODE_INSTALL_SH = "curl -fsSL https://claude.ai/install.sh | bash"
+
+
+def claude_code_install_hint():
+    """Anthropic's own Claude Code installer, as the panel should show it."""
+    if platform.system() == "Windows":
+        return CLAUDE_CODE_INSTALL_PS1
+    return CLAUDE_CODE_INSTALL_SH
+
+
+def claude_code_install_command():
+    """The same installer as an argv list, for the panel to run."""
+    if platform.system() == "Windows":
+        powershell = (
+            shutil.which("powershell") or shutil.which("powershell.exe") or "powershell"
+        )
+        return [powershell, "-NoProfile", "-Command", CLAUDE_CODE_INSTALL_PS1]
+    return ["sh", "-c", CLAUDE_CODE_INSTALL_SH]
+
 
 def sdk_version():
     """Version of the installed `claude-agent-sdk`, or None when absent."""
@@ -140,7 +164,9 @@ def resolve_cli(explicit=None):
         verdict["usable"] = False
         verdict["reason"] = (
             "This is an npm batch shim (.cmd), which the Claude Agent SDK refuses to run on "
-            "Windows. Install the native claude.exe, or keep the CLI bundled with the SDK."
+            "Windows. Install Claude Code with Anthropic's own installer ("
+            + claude_code_install_hint()
+            + "), which writes a real claude.exe, or keep the CLI bundled with the SDK."
         )
         return verdict
 

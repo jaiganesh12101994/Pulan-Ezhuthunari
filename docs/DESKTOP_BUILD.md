@@ -109,18 +109,37 @@ need no account of any kind.
 
 ### The Claude subscription in a packaged build
 
-`claude-agent-sdk` is **not** bundled, because 287 MB of its 288 MB is a single file:
-`_bundled/claude.exe`, the Claude Code CLI. Without it, the Claude subscription path in
-the packaged app needs a Claude Code installation the user already has.
+`claude-agent-sdk` is **not** bundled: almost all of its weight is one file,
+`_bundled/claude.exe` (the Claude Code CLI), which measured 320 MB installed for SDK
+0.2.176 out of a 148.8 MB wheel.
 
-To include it, copy it into the staged app and it will be picked up:
+What *is* bundled is **pip** (`scripts/prepare-python.ps1`), so the packaged app can add
+the SDK itself when the user asks for it: **Sign in → Install it for me** runs
+`python -m pip install claude-agent-sdk` in the app's own Python, which brings the
+transport and that `claude.exe` with it. The installer stays ~232 MB, and only the
+machines that actually want a Claude subscription pay that ~360 MB download.
+
+Anthropic's own installer is the other way to get a CLI the SDK accepts. It writes a
+real `claude.exe` to `%USERPROFILE%\.local\bin`, which `resolve_cli` already probes, so
+no PATH change is needed:
+
+```powershell
+irm https://claude.ai/install.ps1 | iex
+```
+
+The sign-in panel shows that command instead of the pip one when the SDK is already
+present and only the CLI is missing (npm's `claude.cmd` shim, say — the SDK refuses to
+run those). It does not replace the SDK: the app talks to Claude Code *through*
+`claude-agent-sdk`, so the package is needed either way.
+
+To ship the SDK inside the app instead, copy it into the staged runtime and it will be
+picked up:
 
 ```powershell
 python -m pip install --target build\app\python\Lib\site-packages claude-agent-sdk
 ```
 
-That adds roughly 288 MB to the installer. Say the word if you want it in by default and
-it becomes a line in `scripts/prepare-python.ps1`.
+That adds roughly 360 MB to the installer.
 
 ## Verifying a build
 

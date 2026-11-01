@@ -29,7 +29,12 @@ import sys
 import threading
 import time
 
-from environment import resolve_cli
+from environment import (
+    claude_code_install_command,
+    claude_code_install_hint,
+    resolve_cli,
+    sdk_available,
+)
 
 #: The subscriptions this app can drive.
 PROVIDERS = ("claude", "chatgpt", "google")
@@ -218,10 +223,21 @@ def auth_status(provider="claude", cli_path=None):
     if not cli.get("usable"):
         report["installable"] = True
         report["installCommand"] = install_hint(provider)
-        report["message"] = (
+        message = (
             f"{PROVIDER_LABELS[provider]} was not found. Install it with: "
             + install_hint(provider)
         )
+        if provider == "claude" and not sdk_available():
+            # Say plainly why this is the package and not the CLI installer: without it
+            # the app has no transport at all, so installing Claude Code on its own
+            # would still leave the panel in this state.
+            message += (
+                " It installs the claude-agent-sdk package this app talks to Claude Code "
+                "through, and brings a Claude Code binary with it. Anthropic's own "
+                f"installer ({claude_code_install_hint()}) installs Claude Code alone, "
+                "which this app cannot use without that package."
+            )
+        report["message"] = message
         return report
     if provider == "chatgpt":
         return _read_codex_status(cli, report)
@@ -455,9 +471,20 @@ def describe_account(payload):
 
 
 def install_hint(provider):
-    """The vendor's documented install command, as text for the panel."""
+    """
+    The vendor's documented install command, as text for the panel.
+
+    Claude Code needs two things, and which one is missing decides the answer. Without
+    the claude-agent-sdk package there is no transport at all, and installing that
+    package is also what puts a Claude Code binary on the machine, because the wheel
+    ships one. With the package already present it is the CLI that is missing, and
+    Anthropic's own installer is then the documented fix: it writes a real claude.exe
+    to ~/.local/bin, where this app already looks for it.
+    """
     check_provider(provider)
     if provider == "claude":
+        if sdk_available():
+            return claude_code_install_hint()
         return "python -m pip install claude-agent-sdk"
     if provider == "google":
         # The Gemini CLI used to be the answer here. It is not any more: Google retired
@@ -477,6 +504,11 @@ def install_command(provider):
     """
     check_provider(provider)
     if provider == "claude":
+        # The same split as install_hint, so the command the panel runs is the command
+        # it showed: the package when the app has no transport, Anthropic's installer
+        # when only the CLI is missing.
+        if sdk_available():
+            return claude_code_install_command()
         return [sys.executable, "-m", "pip", "install", "claude-agent-sdk"]
     if provider == "google":
         # Google's own installer, run exactly as its documentation gives it.
@@ -569,11 +601,11 @@ class LoginSession:
         if not cli.get("usable"):
             raise AuthError(
                 "cli_not_found",
-                f"The {self.provider} sign-in tool was not found. "
+                f"The {self.provider} sign-in tool was not found. Install it with: "
                 + (
-                    "Install the Claude Agent SDK (pip install claude-agent-sdk), which ships it."
+                    install_hint("claude")
                     if self.provider == "claude"
-                    else "Install the ChatGPT CLI (npm install -g @openai/codex)."
+                    else "npm install -g @openai/codex"
                 ),
             )
         if self.provider == "claude":

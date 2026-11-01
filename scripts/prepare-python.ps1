@@ -10,6 +10,14 @@
     OpenCV        ink binarisation and deskew (headless: no GUI libraries needed)
     pytesseract   the Tesseract CLI wrapper the engine drives
     python-docx   DOCX export (it needs lxml, which pip pulls in)
+    pip           the installer, so the app can add a package at run time
+
+  pip is the one package here that the OCR code never imports. The embeddable
+  distribution ships without pip (and without ensurepip to bootstrap it from), which
+  left the packaged app unable to install anything into itself: the subscription sign-in
+  panel offers exactly one install, `claude-agent-sdk`, and that runs `python -m pip
+  install`. Bundling pip is what makes that button work without packing the SDK - and
+  the ~320 MB Claude Code binary inside its wheel - into the installer for every user.
 
   Torch, transformers and friends are deliberately absent: the Surya / Chandra /
   gnana70 engines in backend/tamil_ocr_engine.py are Tesseract pipelines with their own
@@ -70,14 +78,27 @@ python -m pip install --target $sitePackages --only-binary=:all: --no-warn-scrip
   pillow numpy opencv-python-headless pytesseract python-docx
 $pipExit = $LASTEXITCODE
 
-# 4. Prove it works before anything is packaged around it.
+# 4. pip itself. The sign-in panel's one install button runs `python -m pip install
+#    claude-agent-sdk`, so pip has to exist in the runtime the app ships with. The
+#    embeddable distribution ships neither pip nor ensurepip, so it comes from the
+#    system pip like the packages above; --upgrade keeps a re-run from warning about
+#    the script directory the previous run left behind.
+python -m pip install --target $sitePackages --only-binary=:all: --upgrade `
+  --no-warn-script-location pip
+$pipSelfExit = $LASTEXITCODE
+
+# 5. Prove it works before anything is packaged around it.
 $py = Join-Path $Target 'python.exe'
 & $py -c "import PIL, numpy, cv2, pytesseract, docx; print('  Pillow', PIL.__version__, '| numpy', numpy.__version__, '| OpenCV', cv2.__version__, '| pytesseract', pytesseract.__version__, '| python-docx ok')"
 $probeExit = $LASTEXITCODE
+& $py -m pip --version
+$pipProbeExit = $LASTEXITCODE
 $ErrorActionPreference = 'Stop'
 
 if ($pipExit -ne 0) { throw "pip failed with exit code $pipExit" }
+if ($pipSelfExit -ne 0) { throw "installing pip into the runtime failed with exit code $pipSelfExit" }
 if ($probeExit -ne 0) { throw 'the embedded Python cannot import the OCR dependencies' }
+if ($pipProbeExit -ne 0) { throw 'the embedded Python has no pip, so the in-app install button could not work' }
 
 $size = (Get-ChildItem $Target -Recurse -File | Measure-Object -Property Length -Sum).Sum
 Write-Host ("Python runtime ready: {0} MB" -f [math]::Round($size / 1MB, 1))

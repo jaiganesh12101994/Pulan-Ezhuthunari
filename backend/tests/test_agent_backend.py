@@ -209,6 +209,25 @@ def test_cli_resolution_reports_a_missing_configured_path(tmp_path):
     assert verdict["usable"] is False
 
 
+def test_an_npm_shim_is_rejected_and_points_at_anthropics_installer(monkeypatch, tmp_path):
+    """
+    npm's global install leaves a .cmd shim that CreateProcess cannot run, so the verdict
+    is unusable — and the reason has to name the installer that replaces it.
+    """
+    if os.name != "nt":
+        pytest.skip("the .cmd shim problem is Windows-only")
+    shim = tmp_path / "claude.cmd"
+    shim.write_text("@echo off\n", encoding="utf-8")
+    monkeypatch.delenv(environment.CLI_PATH_ENV, raising=False)
+    monkeypatch.setattr(environment, "bundled_cli_path", lambda: None)
+    monkeypatch.setattr(environment, "_common_locations", lambda: [])
+    monkeypatch.setattr(environment.shutil, "which", lambda name: str(shim))
+    verdict = environment.resolve_cli()
+    assert verdict["found"] is True
+    assert verdict["usable"] is False
+    assert "claude.ai/install" in verdict["reason"]
+
+
 def test_the_wheel_bundles_the_cli(workdir):
     """The Agent SDK ships the CLI, which is why PATH detection is only a fallback."""
     if not environment.sdk_available():
@@ -892,15 +911,65 @@ def test_a_missing_sign_in_tool_is_reported_with_an_instruction(monkeypatch):
     assert "npm install -g @openai/codex" in report["message"]
 
 
-def test_the_install_command_is_the_vendors_own():
+def test_the_install_command_is_the_vendors_own(monkeypatch):
+    monkeypatch.setattr(auth, "sdk_available", lambda: False)
     assert auth.install_hint("claude") == "python -m pip install claude-agent-sdk"
     assert auth.install_hint("chatgpt") == "npm install -g @openai/codex"
-    assert auth.install_command("claude")[1:] == [
+    assert auth.install_command("claude") == [
+        sys.executable,
         "-m",
         "pip",
         "install",
         "claude-agent-sdk",
     ]
+
+
+def test_without_the_sdk_the_panel_installs_the_package_that_ships_the_cli(monkeypatch, tmp_path):
+    """
+    The packaged app has no claude-agent-sdk, so it has no transport at all. The package
+    is what is missing, and the wheel carries a Claude Code binary with it, which is why
+    this is the fix rather than the CLI installer.
+    """
+    monkeypatch.setattr(auth, "sdk_available", lambda: False)
+    report = auth.auth_status("claude", cli_path=str(tmp_path / "absent" / "claude.exe"))
+    assert report["available"] is False
+    assert report["installable"] is True
+    assert report["installCommand"] == "python -m pip install claude-agent-sdk"
+    assert "claude-agent-sdk" in report["message"]
+    assert "brings a Claude Code binary" in report["message"]
+
+
+def test_with_the_sdk_the_panel_offers_anthropics_own_installer(monkeypatch):
+    """
+    With the package present only the CLI can be missing, and npm's .cmd shim — which the
+    SDK refuses to run — is exactly what Anthropic's own installer replaces.
+    """
+    monkeypatch.setattr(auth, "sdk_available", lambda: True)
+    hint = auth.install_hint("claude")
+    command = auth.install_command("claude")
+    if os.name == "nt":
+        assert hint == environment.CLAUDE_CODE_INSTALL_PS1
+        assert command[1:3] == ["-NoProfile", "-Command"]
+    else:
+        assert hint == environment.CLAUDE_CODE_INSTALL_SH
+        assert command[:2] == ["sh", "-c"]
+    assert "claude.ai/install" in hint
+
+
+def test_the_claude_hint_and_the_claude_command_never_disagree(monkeypatch):
+    """
+    The panel shows one and runs the other, so they may not describe different fixes.
+    """
+    for has_sdk in (True, False):
+        monkeypatch.setattr(auth, "sdk_available", lambda value=has_sdk: value)
+        hint = auth.install_hint("claude")
+        command = auth.install_command("claude")
+        if has_sdk:
+            assert "claude.ai/install" in hint
+            assert any("claude.ai/install" in part for part in command)
+        else:
+            assert "pip install claude-agent-sdk" in hint
+            assert command == [sys.executable, "-m", "pip", "install", "claude-agent-sdk"]
 
 
 def test_the_chatgpt_install_uses_npm_when_it_is_available(monkeypatch):

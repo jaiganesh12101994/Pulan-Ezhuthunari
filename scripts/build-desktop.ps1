@@ -158,10 +158,15 @@ if ($Installer) {
   $ErrorActionPreference = 'Stop'
   if ($builderExit -ne 0) { throw "electron-builder failed ($builderExit)" }
 
-  $installer = Get-ChildItem (Join-Path $build 'installer') -Filter '*.exe' -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -notlike 'Uninstall*' } | Select-Object -First 1
-  if ($installer) {
-    Write-Host ("Installer: {0} ({1} MB)" -f $installer.FullName, [math]::Round($installer.Length / 1MB, 1))
+  # Not $installer: PowerShell variable names are case-insensitive, and $Installer is the
+  # [switch] parameter, so assigning a FileInfo to it fails the whole script *after* the
+  # build has already succeeded. The __uninstaller.exe that electron-builder leaves beside
+  # the setup sorts before it, so match on the whole name rather than on the prefix.
+  $setup = Get-ChildItem (Join-Path $build 'installer') -Filter '*.exe' -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -notlike '*uninstaller*' -and $_.Name -notlike 'Uninstall*' } |
+    Select-Object -First 1
+  if ($setup) {
+    Write-Host ("Installer: {0} ({1} MB)" -f $setup.FullName, [math]::Round($setup.Length / 1MB, 1))
   } else {
     throw 'electron-builder reported success but produced no installer'
   }

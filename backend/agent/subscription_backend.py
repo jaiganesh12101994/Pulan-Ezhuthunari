@@ -36,7 +36,8 @@ NOT_SIGNED_IN_MESSAGE = (
 )
 NOT_INSTALLED_MESSAGE = (
     "The claude-agent-sdk package is not installed in the Python environment this app "
-    "uses. Install it with `pip install claude-agent-sdk`."
+    "uses. Open the Claude sign-in panel and press Install, which runs `pip install "
+    "claude-agent-sdk` for you; that package also brings the Claude Code binary with it."
 )
 PROTOCOL_MESSAGE = (
     "Claude Code sent a response this app could not read. Updating the claude-agent-sdk "
