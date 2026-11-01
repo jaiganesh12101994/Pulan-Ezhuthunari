@@ -987,6 +987,17 @@ def test_a_missing_npm_is_explained_rather_than_failing_raw(monkeypatch):
     assert "nodejs.org" in raised.value.message
 
 
+def test_an_installer_never_inherits_the_sidecar_stdin(monkeypatch):
+    """
+    The sidecar's stdin is the pipe node writes the sidecar protocol to, and the child is
+    a console program started from a console-less parent: neither should be inherited.
+    """
+    options = auth._installer_spawn_options()
+    assert options["stdin"] == subprocess.DEVNULL
+    if os.name == "nt":
+        assert options["creationflags"] == 0x08000000
+
+
 def test_a_missing_tool_says_which_command_installs_it(monkeypatch):
     monkeypatch.setenv("CODEX_CLI_BIN", "definitely-not-installed-codex")
     report = auth.auth_status("chatgpt")

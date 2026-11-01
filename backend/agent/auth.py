@@ -533,6 +533,22 @@ def install_command(provider):
     return [npm, "install", "-g", "@openai/codex"]
 
 
+def _installer_spawn_options():
+    """
+    How to run a vendor installer without handing it the sidecar's own plumbing.
+
+    Two things matter on Windows. The sidecar's stdin is the pipe node writes the sidecar
+    protocol to, so the child is given DEVNULL rather than a share of it: nothing about an
+    installer should be able to read or consume that. And the child is a console program
+    while this app is not, so CREATE_NO_WINDOW keeps Windows from creating a console for
+    it — that combination is what a child can get stuck in before it ever runs.
+    """
+    options = {"stdin": subprocess.DEVNULL}
+    if os.name == "nt":
+        options["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+    return options
+
+
 def install_tool(provider, timeout=900):
     """
     Install the provider's sign-in tool, using the vendor's own documented command.
@@ -550,6 +566,7 @@ def install_tool(provider, timeout=900):
             encoding="utf-8",
             errors="replace",
             timeout=timeout,
+            **_installer_spawn_options(),
         )
     except Exception as exc:  # noqa: BLE001 - reported, never raised raw
         raise AuthError("install_failed", f"`{shown}` could not be run: {exc}") from exc
